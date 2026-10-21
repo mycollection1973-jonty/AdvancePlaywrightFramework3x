@@ -1,0 +1,18 @@
+
+# Env
+.env
+
+# Local agent tooling
+.commandcode/
+
+# Generated reports
+tta-report/
+reports/
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
