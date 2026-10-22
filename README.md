@@ -1,6 +1,6 @@
 # AdvancePlaywrightFramework3x
 
-End-to-end test automation framework built on [Playwright Test](https://playwright.dev/) and TypeScript, with Page Object Model, data-driven readers and a self-contained HTML reporter.
+End-to-end test automation framework built on [Playwright Test](https://playwright.dev/) and TypeScript: a Page Object Model over the TTACart demo app, data-driven readers, Winston logging and a self-contained HTML reporter.
 
 ## Stack
 
@@ -30,19 +30,46 @@ npx playwright test
 
 ```
 src/
+├── ai/           reporter's AI helpers (RCA verdicts, flaky diff, provider check)
 ├── api/          API clients
 ├── config/       environment configuration
 ├── fixtures/     custom Playwright fixtures
-├── pages/        Page Object Model
+├── pages/        Page Object Model (BasePage + TTACart pages)
 ├── testdata/     test data
-├── tests/        spec files
-└── utils/        reusable utilities + CustomReporter
+├── tests/        spec files, e2e/ for the full checkout flow
+└── utils/        locator wrapper, logger, data readers, CustomReporter
 playwright.config.ts
 tsconfig.json
 .env                (gitignored)
 ```
 
-Page objects currently cover the TTACart app: `LoginPage`, `InventoryPage` and `CartPage`.
+## Architecture
+
+**`BasePage`** — every page object extends it and inherits four things only: `page` (the Playwright handle), `el` (`UtilElementLocator` bound to the page), `log` (a `Logger` scoped to the subclass name) and `goto(relativePath)`. Subclasses declare their own `private readonly` locators; the base class deliberately builds none. Each page also exposes a `static readonly PATH` plus `open()` / `assertLoaded()`.
+
+**`UtilElementLocator`** (`src/utils/UtilElementLocator.ts`) — one wrapper for the actions and assertions a suite repeats: `click`, `fill`, `type`/`pressSequentially`, `hover`, `getText`/`getAttr`/`getValue`, `count`, `isVisible`, `waitForVisible`/`waitForHidden`, `selectByText`/`selectByValue`/`selectByIndex`, and a `waitForPageLoad()`. Every target accepts a `Flex` — either a CSS/XPath string or an already-built `Locator` — and each action logs through the page's scoped logger with a 15s default timeout.
+
+**`Logger`** (`src/utils/logger.ts`) — Winston, with a scoped child logger per page object so every line names its source:
+
+```
+2026-06-02 07:40:01 [info] [LoginPage] loginAs standard_user
+```
+
+Level comes from `LOG_LEVEL` (default `info`); output goes to the console and to `logs/combined.log`.
+
+**Path alias** — pages and utils import the shared helpers as `@utils/...`, so `tsconfig.json` needs a matching `paths` mapping for both `tsc` and the Playwright runner to resolve them.
+
+## Page objects
+
+| Page | Covers |
+| --- | --- |
+| `LoginPage` | TTACart login form, credential errors |
+| `InventoryPage` | Product list, sorting, add/remove from cart |
+| `ItemDetailPage` | Single product view (`?id=...`) |
+| `CartPage` | Cart contents, remove item, start checkout |
+| `CheckoutStepOnePage` | Guest details form (`problem_user` quirk documented in the class) |
+| `CheckoutStepTwoPage` | Order overview, subtotal/tax/total parsing, finish |
+| `CheckoutCompletePage` | Order confirmation |
 
 ## Custom reporter
 
@@ -82,13 +109,13 @@ The AI verdicts and flaky list are rule-based and run fully offline; they need n
 | `BASE_URL` | Default app URL |
 | `QA_BASE_URL`, `STG_BASE_URL`, `PROD_BASE_URL`, `DEV_BASE_URL` | Per-environment URLs |
 | `API_BASE_URL` | API under test |
-| `LOG_LEVEL` | Logger verbosity |
+| `LOG_LEVEL` | Logger verbosity (`info` by default) |
 | `TEST_ENV` | Environment shown in the report (defaults to `UAT`) |
 | `TEST_AUTHOR` | Author shown in the report (defaults to `TTA-QA`) |
 | `USERNAME`, `PASSWORD` | Default credentials |
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` | Only for `dbReader.ts` |
 
-`dotenv.config()` in `playwright.config.ts` is commented out — uncomment it (or import `dotenv/config` in a setup file) before relying on any of the values above.
+Two config touches are still commented out in `playwright.config.ts`: enabling `dotenv.config()`, and setting `use.baseURL`. Page objects navigate with relative `PATH` values, so the suite needs `baseURL` (feed it from `BASE_URL`) before it can reach TTACart.
 
 ## Useful commands
 

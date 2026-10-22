@@ -1,34 +1,58 @@
-// 15-10-2026
+// 15-10-2026  first it was copied fromm PWFundamentals but change it to BasePage on 22-10
+// 22-10-2026
 
 //Login
 
-import {Page, Locator} from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
+import { BasePage } from './BasePage';
 
-export class LoginPage {
+/**
+ * TTACart login screen.
+ *
+ *   const login = new LoginPage(page);
+ *   await login.open();
+ *   await login.loginAs('standard_user', 'tta_secret');
+ */
 
-    //Page Locators
-    readonly page : Page;
-    readonly emailInput : Locator;
-    readonly passwordInput : Locator;
-    readonly loginButton : Locator;
+export class LoginPage extends BasePage {
 
-    constructor(page : Page) {
-        this.page = page;
-        this.emailInput = page.getByRole('textbox', {name : "Username"});
-        this.passwordInput = page.getByRole('textbox', {name : "Password"});
-        // TTACart uses data-test, not Playwright's default data-testid.
-        this.loginButton = page.locator('[data-test="login-button"]');
-    }
+    static readonly PATH = '/playwright/ttacart/index.html';
 
-    // Paga Actions
-    async goto(){
-        await this.page.goto('https://app.thetestingacademy.com/playwright/ttacart/');
-    }
+    private readonly usernameInput : Locator;
+    private readonly passwordInput : Locator;
+    private readonly loginButton : Locator;
+    private readonly errorBox : Locator;
+    private readonly loginCredentialsHint : Locator;
 
-    async login(username : string, password : string)
+    constructor( page : Page )
     {
-        await this.emailInput.fill(username);
-        await this.passwordInput.fill(password);
-        await this.loginButton.click();
+        super( page, 'LoginPage');
+        this.usernameInput = page.locator('[data-test="username"]');
+        this.passwordInput = page.locator('[data-test="password"]');
+        this.loginButton = page.locator('[data-test="login-button"]');
+        this.errorBox = page.locator('[data-test="error"]');
+        this.loginCredentialsHint = page.locator('[data-test="login-credentials"]');
     }
+
+    async open() : Promise<void> 
+    {
+        this.log.info("Open Login Page");
+        await this.goto(LoginPage.PATH);
+    }
+
+    async loginAs(username : string, password : string) : Promise<void> {
+        this.log.info(`loginAs ${username}`);
+        await this.el.fill(this.usernameInput, username);
+        await this.el.fill(this.passwordInput, password);
+        await this.el.click(this.loginButton);
+        await expect.poll(async() => (
+            this.page.url().includes('/inventory') || await this.errorBox.isVisible()
+        )).toBe(true);
+    }
+    
+    async waitForLoginButtonHidden() : Promise<void> {
+        await this.el.waitForHidden(this.loginButton);
+    }
+
+
 }
