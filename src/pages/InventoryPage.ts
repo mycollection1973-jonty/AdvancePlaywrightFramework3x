@@ -40,7 +40,7 @@ export class InventoryPage extends BasePage {
   }
 
   async productNames() : Promise<string[]> {
-    return this.el.getAllTexts(this.itemNames);
+    return this.el.getAllText(this.itemNames);
   }
 
   private addBtn(id : string) : Locator {

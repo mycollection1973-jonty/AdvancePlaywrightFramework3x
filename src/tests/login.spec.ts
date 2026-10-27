@@ -13,8 +13,8 @@ test.describe('POM with Login page simple', () => {
 
         // This is with POM
         const loginPage = new LoginPage(page);
-        await loginPage.goto();
-        await loginPage.login("standard_user", "tta-secret");
-        await expect(page).toHaveTitle("TTACart - Login");
+        await loginPage.open();
+        await loginPage.loginAs("standard_user", "tta_secret");
+        await expect(page).toHaveTitle("TTACart - Products");
     })
 })

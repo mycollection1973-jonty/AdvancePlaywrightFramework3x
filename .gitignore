@@ -8,6 +8,8 @@
 # Generated reports
 tta-report/
 reports/
+allure-results/
+logs/
 
 # Playwright
 node_modules/

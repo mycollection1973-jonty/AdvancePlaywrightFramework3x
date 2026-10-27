@@ -30,6 +30,10 @@ export class CheckoutCompletePage extends BasePage {
     }
 
     async open() :Promise<void> {
+        await this.assertLoaded();
+    }
+
+    async assertLoaded() : Promise<void> {
         await expect(this.page).toHaveURL(/checkout-complete(\.html)?$/);
         await expect(this.title).toContainText('Checkout: Complete!');
     }

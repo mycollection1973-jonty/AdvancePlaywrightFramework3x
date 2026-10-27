@@ -16,6 +16,7 @@
  */
 
 import winston from 'winston';
+import { envOr } from '@config/env';
 
 const { combine, timestamp, printf, colorize, errors } = winston.format;
 
@@ -26,7 +27,7 @@ const lineFormat = printf(({ level, message, timestamp : ts, scope}) => {
 });
 
 export const logger = winston.createLogger({
-    level : LOG_LEVEL,
+    level : envOr('LOG_LEVEL', 'info'),
     format : combine(
         errors({ stack : true}),
         timestamp({ format : 'YYYY-MM-DD HH:mm:ss'}),

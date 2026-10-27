@@ -9,7 +9,16 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@api/*": ["./src/api/*"],
+      "@config/*": ["./src/config/*"],
+      "@fixtures/*": ["./src/fixtures/*"],
+      "@pages/*": ["./src/pages/*"],
+      "@testdata/*": ["./src/testdata/*"],
+      "@utils/*": ["./src/utils/*"]
+    }
+
   },
   "include": ["src", "playwright.config.ts"]
 }

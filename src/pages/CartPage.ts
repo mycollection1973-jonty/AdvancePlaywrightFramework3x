@@ -44,7 +44,7 @@ export class CartPage extends BasePage {
   }
 
   async itemNamesList() : Promise<string[]> {
-    return this.el.getAllTexts(this.itemNames);
+    return this.el.getAllText(this.itemNames);
   }
 
   async rowCount() : Promise<number> {
