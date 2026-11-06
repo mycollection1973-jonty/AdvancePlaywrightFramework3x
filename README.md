@@ -36,7 +36,7 @@ src/
 ├── fixtures/     custom Playwright fixtures (`test-base.ts`)
 ├── pages/        Page Object Model (BasePage + TTACart pages)
 ├── testdata/     test data (`logintestdata.json`)
-├── tests/        spec files, `e2e/` for the end-to-end flows
+├── tests/        spec files — `e2e/` for the UI flows, `apiTests/` for the API ones
 └── utils/        locator wrapper, logger, `visualSteps`, `DataGenerator`, data readers, CustomReporter
 playwright.config.ts
 tsconfig.json
@@ -86,6 +86,31 @@ Specs import `test` from `src/fixtures/test-base.ts` rather than `@playwright/te
 State fixtures run only when a test asks for one, and they compose: `loginWithSelectedItem` depends on `loginWithInventory`, which depends on `validLogin`. So requesting `validLogin` **is** the login step — there is no separate setup call in the spec.
 
 Logins here read `src/testdata/logintestdata.json`; use `credentials` from `src/config/credentials.ts` when you want the `.env` values instead.
+
+## API tests
+
+`src/tests/apiTests/` holds the API specs. They drive endpoints with Playwright's built-in `request` fixture and call relative paths, so — exactly like the UI specs — they resolve against `use.baseURL`:
+
+| Spec | Covers |
+| --- | --- |
+| `01_restfulbooker_raw/01_01_basic_ping.spec.ts` | `GET /ping` — is the server up |
+| `01_restfulbooker_raw/01_02_post_operation.spec.ts` | `POST /booking` — create a booking |
+| `01_restfulbooker_raw/01_03_newContext_api.spec.ts` | `request.newContext()` with its own `baseURL` and headers |
+| `01_restfulbooker_raw/01_04_put_operation.spec.ts` | `POST /auth` → `POST /booking` → `PUT /booking/:id` |
+| `01_restfulbooker_raw/01_06_put_operation_negative_scenario.spec.ts` | Refused updates — no token, bad token, unknown id |
+
+### Running them
+
+These specs target restful-booker, so point `BASE_URL` at it for the run:
+
+```powershell
+$env:BASE_URL='https://restful-booker.herokuapp.com'
+npx playwright test "src/tests/apiTests/01_restfulbooker_raw/01_04_put_operation.spec.ts"
+```
+
+The override is not optional. `resolveBaseURL()` returns `BASE_URL` before it ever looks at `TTA_ENV`, and `.env` always sets `BASE_URL` to the TTACart app — so setting `TTA_ENV=api` on its own changes nothing and the request goes to the wrong host, which answers `200` with an HTML page instead of the JSON you expect.
+
+Because this folder sits under `testDir`, a bare `npx playwright test` collects these specs alongside the UI suite and runs them against the TTACart URL, where they fail. Pass a path to run one, or add a second project in `playwright.config.ts` with its own `baseURL` and a `testMatch` for `apiTests/`.
 
 ## Custom reporter
 
@@ -142,7 +167,7 @@ Both AI passes are rule-based and offline: the verdicts come from a pattern tabl
 | `TTA_ENV` | Framework environment label (`qa`, `stg`, `prod`, `dev`) |
 | `BASE_URL` | Default app URL — wins over the per-environment values below |
 | `QA_BASE_URL`, `STG_BASE_URL`, `PROD_BASE_URL`, `DEV_BASE_URL` | Per-environment URLs |
-| `API_BASE_URL` | API under test |
+| `API_BASE_URL` | API under test — only reached when `BASE_URL` is unset (see [API tests](#api-tests)) |
 | `LOG_LEVEL` | Logger verbosity (`info` by default) |
 | `TEST_ENV` | Environment shown in the report (defaults to `UAT`) |
 | `TEST_AUTHOR` | Author shown in the report (defaults to `TTA-QA`) |
@@ -161,6 +186,7 @@ npx playwright test                          # all browsers, custom reporter
 npx playwright test --project=chromium       # single browser
 npx playwright test --ui                     # interactive UI mode
 npx playwright test --reporter=list          # console only, writes no report
+npx playwright test src/tests/apiTests       # API specs (needs the BASE_URL override, see API tests)
 npx playwright show-report                   # built-in HTML reporter (when enabled)
 npx tsc --noEmit                             # typecheck
 ```
