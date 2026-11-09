@@ -31,13 +31,13 @@ npx playwright test
 ```
 src/
 ├── ai/           reporter's AI helpers (rule-based RCA verdicts, flaky diff, provider check)
-├── api/          API clients (placeholder — .gitkeep only)
+├── api/          API clients (`BookingApi.ts` — the restful-booker booking client)
 ├── config/       `env.ts` (`envOr`), `credentials.ts`, per-environment URLs
-├── fixtures/     custom Playwright fixtures (`test-base.ts`)
+├── fixtures/     custom Playwright fixtures (`test-base.ts`, `booker.fixture.ts`)
 ├── pages/        Page Object Model (BasePage + TTACart pages)
-├── testdata/     test data (`logintestdata.json`)
+├── testdata/     test data (`logintestdata.json`, `booking.data.ts`)
 ├── tests/        spec files — `e2e/` for the UI flows, `apiTests/` for the API ones
-└── utils/        locator wrapper, logger, `visualSteps`, `DataGenerator`, data readers, CustomReporter
+└── utils/        locator wrapper, `ApiHelper`, logger, `visualSteps`, `DataGenerator`, data readers, CustomReporter
 playwright.config.ts
 tsconfig.json
 .env                (gitignored)
@@ -73,7 +73,9 @@ Level comes from `LOG_LEVEL` (default `info`); output goes to the console and to
 
 ## Fixtures
 
-Specs import `test` from `src/fixtures/test-base.ts` rather than `@playwright/test`. It hands over every page object already built against the test's `page`, plus ready-made states so setup is not repeated in each spec:
+There are two fixture files, one per suite.
+
+**UI — `src/fixtures/test-base.ts`.** Specs import `test` from here rather than `@playwright/test`. It hands over every page object already built against the test's `page`, plus ready-made states so setup is not repeated in each spec:
 
 | Fixture | What the test receives |
 | --- | --- |
@@ -87,6 +89,15 @@ State fixtures run only when a test asks for one, and they compose: `loginWithSe
 
 Logins here read `src/testdata/logintestdata.json`; use `credentials` from `src/config/credentials.ts` when you want the `.env` values instead.
 
+**API — `src/fixtures/booker.fixture.ts`.** The restful-booker specs import `test` from here instead:
+
+| Fixture | What the test receives |
+| --- | --- |
+| `bookingApi` | A `BookingApi` bound to the test's `request` context |
+| `bookerToken` | A freshly minted auth token |
+
+`bookerToken` resolves once, before the test body runs, so it cannot notice a token that expires mid-test. That recovery lives in `BookingApi.sendAuthed()`: omit the token argument on a mutating call and it re-auths on a `403` and retries. Ask for `bookerToken` when you want the token value itself — to log it, pass it on, or assert on it.
+
 ## API tests
 
 `src/tests/apiTests/` holds the API specs. They drive endpoints with Playwright's built-in `request` fixture and call relative paths, so — exactly like the UI specs — they resolve against `use.baseURL`:
@@ -97,7 +108,21 @@ Logins here read `src/testdata/logintestdata.json`; use `credentials` from `src/
 | `01_restfulbooker_raw/01_02_post_operation.spec.ts` | `POST /booking` — create a booking |
 | `01_restfulbooker_raw/01_03_newContext_api.spec.ts` | `request.newContext()` with its own `baseURL` and headers |
 | `01_restfulbooker_raw/01_04_put_operation.spec.ts` | `POST /auth` → `POST /booking` → `PUT /booking/:id` |
+| `01_restfulbooker_raw/01_05_Crud.spec.ts` | Token, create and update as one serial flow sharing state |
 | `01_restfulbooker_raw/01_06_put_operation_negative_scenario.spec.ts` | Refused updates — no token, bad token, unknown id |
+| `02_restfulbooker_apiHelper/02_01_create-booking.spec.ts` | Create a booking through `ApiHelper` |
+| `02_restfulbooker_apiHelper/02_02_update-booking.spec.ts` | Update that booking, sending the token as a cookie header |
+| `03_restfulbooker_fixture_e2e/03-01_booking-crud-e2e.spec.ts` | Full lifecycle — create, update, read back, delete |
+
+### The three levels
+
+The folders build on each other, which is the point of the numbering:
+
+1. **Raw** — `01_restfulbooker_raw/` calls Playwright's `request` fixture directly, one endpoint per spec. Payloads and headers sit inline in each spec, and every spec repeats its own auth step.
+2. **Helper** — `02_restfulbooker_apiHelper/` keeps the same shape but goes through `ApiHelper` (`src/utils/ApiHelper.ts`), which adds `get`/`post`/`put`/`patch`/`delete`, query-string building, `parseJsonResponse<T>()`, `isSuccess()`, and an optional retry loop.
+3. **Fixture** — `03_restfulbooker_fixture_e2e/` imports `test` from `src/fixtures/booker.fixture.ts` and asks for `bookingApi`. `BookingApi` (`src/api/BookingApi.ts`) is the only place that knows the restful-booker URLs and the `Cookie: token=` header. It caches the auth token, and if a managed call comes back `403` it re-auths once and retries — pass an explicit token to opt out, which is how a negative test still asserts a 403.
+
+One trap that applies at every level: the demo API answers **bad credentials with `200`** and `{"reason":"Bad credentials"}`, so a status check on its own is not an auth check. `BookingApi.auth()` looks for a token in the body for exactly that reason.
 
 ### Running them
 
@@ -157,6 +182,7 @@ Both AI passes are rule-based and offline: the verdicts come from a pattern tabl
 | `src/utils/dbReader.ts` | MySQL via `mysql2` (async, needs the `MYSQL_*` env vars) |
 | `src/utils/generateExcel.ts` | Writes the shared `login-data.xlsx` fixture |
 | `src/utils/DataGenerator.ts` | Faker-backed fakes — `checkoutCustomer()`, `credentials()`, `userProfile()` and friends |
+| `src/testdata/booking.data.ts` | Booking payload builders — `buildBookingFromGenerator()`, `buildBooking()` |
 
 ## Environment variables
 
@@ -174,6 +200,7 @@ Both AI passes are rule-based and offline: the verdicts come from a pattern tabl
 | `USERNAME`, `PASSWORD` | Default credentials |
 | `STANDARD_USER`, `TTA_SECRET` | Credentials used by `src/config/credentials.ts` (defaults `standard_user` / `tta_secret`) |
 | `ATTACH_SCREENSHOTS` | `true` makes `visualStep` attach a screenshot per step |
+| `BOOKER_USERNAME`, `BOOKER_PASSWORD` | Credentials for the restful-booker specs (defaults `admin` / `password123`) |
 | `CHECKOUT_FIRST_NAME`, `CHECKOUT_LAST_NAME`, `CHECKOUT_POSTAL_CODE` | Optional overrides for `DataGenerator.checkoutCustomerFromEnv()` |
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` | Only for `dbReader.ts` |
 
