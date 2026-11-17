@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://thetestingacademy.com/schemas/checkoutCustomer.schema.json",
+  "title": "CheckoutCustomer",
+  "description": "Customer details for the TTACart checkout form. The initials the prompt asks for cannot live here (they change per call), so the caller checks those.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["firstName", "lastName", "postalCode"],
+  "properties": {
+    "firstName": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,20}$"
+    },
+    "lastName": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,20}$"
+    },
+    "postalCode": {
+      "type": "string",
+      "pattern": "^[0-9]{5}$"
+    }
+  }
+}

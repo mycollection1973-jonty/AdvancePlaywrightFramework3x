@@ -1,9 +1,14 @@
 /**
  * Root-cause analysis for failed tests, rendered in the report's "AI Verdict" tab.
  *
- * shortcut: verdicts come from the rule table below, not from an LLM. Swap the
- * rules for a provider call (see ../config/providers) once a key is wired up.
+ * The verdict comes from the LLM agent defined by `rca.prompt.md` + `rca.schema.json`
+ * whenever a provider is configured. Anything going wrong on that path — no key, no
+ * balance, a reply that misses the schema — falls back to the rule table below, so the
+ * tab is never empty just because the provider was unavailable.
  */
+
+import { createAgent } from './agentFactory';
+import { isLLMConfigured } from '../LLMGateway';
 
 export interface FailureInput {
     title: string;
@@ -18,6 +23,9 @@ export interface RcaVerdict {
     rootCause: string;
     fixes: string[];
 }
+
+/** Prompt + schema live in src/ai/prompts — see agentFactory.ts. */
+const rcaLlm = createAgent<RcaVerdict>({ prompt: 'rca.prompt.md', schema: 'rca.schema.json' });
 
 interface Rule {
     pattern: RegExp;
@@ -87,7 +95,28 @@ const FALLBACK: Omit<Rule, 'pattern'> = {
     fixes: ['Read the top framework frame of the stack trace, then inspect the artifacts captured around it.'],
 };
 
+/**
+ * Triage one failure. Prefers the LLM agent and falls back to the rule table, so a
+ * missing key, an empty balance or a malformed reply still yields a verdict.
+ */
 export async function analyzeFailure(input: FailureInput): Promise<RcaVerdict> {
+    if (isLLMConfigured()) {
+        try {
+            return await rcaLlm({
+                TITLE: input.title,
+                FILE: input.file,
+                ERROR: input.error,
+                STACK: input.stack ?? '(no stack trace captured)',
+            });
+        } catch (error) {
+            console.warn(`RCA agent: LLM unavailable (${(error as Error).message}); using the rule table.`);
+        }
+    }
+    return fromRules(input);
+}
+
+/** Offline fallback: the first rule whose pattern appears in the error or the stack. */
+function fromRules(input: FailureInput): RcaVerdict {
     const haystack = `${input.error}\n${input.stack ?? ''}`;
     const rule = RULES.find((r) => r.pattern.test(haystack)) ?? FALLBACK;
     return {

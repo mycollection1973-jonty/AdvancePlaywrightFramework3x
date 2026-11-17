@@ -11,6 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
     "paths": {
+      "@ai/*": ["./src/ai/*"],
       "@api/*": ["./src/api/*"],
       "@config/*": ["./src/config/*"],
       "@fixtures/*": ["./src/fixtures/*"],

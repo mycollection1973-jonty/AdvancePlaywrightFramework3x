@@ -17,6 +17,7 @@
 
 import { faker } from '@faker-js/faker';
 import { envOr } from '@config/env';
+import { checkoutCustomerAgent } from '@ai/agents/dataAgent';
 
 export interface Credentials {
     username : string;
@@ -34,6 +35,9 @@ export interface UserProfile extends Credentials, CheckoutCustomer {
     fullName : string;
     phone : string;
 }
+
+/** States the DataGen agent may place the customer in. */
+const STATES = ['California', 'Texas', 'Florida', 'New York'] as const;
 
 export class DataGenerator {
     // ---------- credentials ----------
@@ -131,6 +135,22 @@ export class DataGenerator {
             lastName: envOr('CHECKOUT_LAST_NAME', generated.lastName),
             postalCode: envOr('CHECKOUT_POSTAL_CODE', generated.postalCode),
         };
+    }
+
+    /**
+     * Checkout customer invented by the DataGen agent — prompt and schema in
+     * `src/ai/prompts/` — through whichever provider `.env` selects. Async because it
+     * is a network call.
+     *
+     * Fresh random slots every call: reusing a prompt makes the model repeat itself.
+     * The schema has already checked the shape, so nothing to validate here.
+     */
+    static async checkoutCustomerFromAi(): Promise<CheckoutCustomer> {
+        return checkoutCustomerAgent({
+            FIRST_INITIAL: DataGenerator.firstName().charAt(0).toUpperCase(),
+            LAST_INITIAL: DataGenerator.lastName().charAt(0).toUpperCase(),
+            STATE: DataGenerator.oneOf(STATES),
+        });
     }
 
     /** Full profile — creds + checkout fields + contact. */

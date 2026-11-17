@@ -30,7 +30,7 @@ npx playwright test
 
 ```
 src/
-├── ai/           reporter's AI helpers (rule-based RCA verdicts, flaky diff, provider check)
+├── ai/           LLM gateway, agent factory (`agents/`), prompts + schemas (`prompts/`)
 ├── api/          API clients (`BookingApi.ts` — the restful-booker booking client)
 ├── config/       `env.ts` (`envOr`), `credentials.ts`, per-environment URLs
 ├── fixtures/     custom Playwright fixtures (`test-base.ts`, `booker.fixture.ts`)
@@ -137,6 +137,56 @@ The override is not optional. `resolveBaseURL()` returns `BASE_URL` before it ev
 
 Because this folder sits under `testDir`, a bare `npx playwright test` collects these specs alongside the UI suite and runs them against the TTACart URL, where they fail. Pass a path to run one, or add a second project in `playwright.config.ts` with its own `baseURL` and a `testMatch` for `apiTests/`.
 
+## AI agents
+
+Three agents run today. Each one is **a prompt file plus an output schema**, executed by the same factory — no agent owns any plumbing of its own:
+
+| Agent | Prompt + schema (`src/ai/prompts/`) | Runs when | Fills |
+| --- | --- | --- | --- |
+| **DataGen** | `checkoutCustomer.prompt.md` + `.schema.json` | a spec needs test data | the `ai-data` attachment → **AI Data** tab |
+| **RCA** | `rca.prompt.md` + `rca.schema.json` | a test fails | **AI Verdict** tab |
+| **Self-heal** | `selfheal.prompt.md` + `selfheal.schema.json` | a locator finds nothing | the `self-heal` attachment → **Self-Heal** tab |
+
+All of them go through `src/ai/LLMGateway.ts`, so the provider is a configuration choice rather than an agent decision: `LLM_PROVIDER` names one, `<PROVIDER>_API_KEY` supplies the key, and `LLM_ALLOWED_PROVIDERS` is the company allowlist. Groq, OpenRouter, OpenAI, Anthropic and DeepSeek share only two wire formats, so the gateway is one registry plus two request builders — not five clients.
+
+### How an agent is built
+
+Two files and a one-line call:
+
+```ts
+// src/ai/agents/dataAgent.ts
+export const checkoutCustomerAgent = createAgent<CheckoutCustomer>({
+    prompt: 'checkoutCustomer.prompt.md',
+    schema: 'checkoutCustomer.schema.json',
+});
+
+const customer = await checkoutCustomerAgent({ FIRST_INITIAL: 'A', LAST_INITIAL: 'B', STATE: 'Texas' });
+```
+
+`createAgent()` (`src/ai/agents/agentFactory.ts`) fills the prompt's `{{SLOTS}}`, asks the gateway for JSON, validates the reply against the schema with Ajv, and throws an error naming the field that did not match. Prompts are read on every call, so editing one takes effect on the next run without a restart.
+
+The schemas are the contract, not decoration: a reply that drops `postalCode` or invents an extra key fails at the agent, before anything reaches a checkout form or a report tab.
+
+The prompt carries slots for a reason — sending an identical prompt each time makes a model repeat itself. Vary something per call (initials, a state, a seed) and the output varies with it.
+
+### Every agent has an offline fallback
+
+The run says which path answered, so a populated tab is never mistaken for a working model:
+
+| Agent | Fallback when the provider is unavailable |
+| --- | --- |
+| DataGen | `DataGenerator.checkoutCustomer()` — the AI Data card records `"source": "faker-fallback"` |
+| RCA | the rule table in `rcaAgent.ts` — the console prints `using the rule table` |
+| Self-heal | no candidates; the card shows `unavailableReason` instead of a suggestion |
+
+That is deliberate. A missing key, an empty balance or a malformed reply degrades one feature instead of turning the suite red, and it never silently pretends the model answered.
+
+### Exercising the agents without a key
+
+`LLM_BASE_URL` (or the `baseUrl` constructor option) points every agent at a local mock, so prompt rendering, schema validation and the report wiring can all be tested with a twenty-line `node:http` server. Worked examples: `learnings/2026-11-16-ai-agent-factory-plan.md` and `learnings/2026-11-12-llm-gateway-multi-provider.md`.
+
+The fourth agent in the plan — a flaky-summary agent — is not built yet. `analyzeFlaky()` still returns counts only, which is why the Flaky tab has no AI summary.
+
 ## Custom reporter
 
 `playwright.config.ts` runs every suite through `src/utils/CustomReporter.ts`, so you get a live report that updates as tests finish plus a final one:
@@ -149,9 +199,9 @@ npx playwright test
 It copies screenshots, video and trace attachments next to the report and exposes these tabs:
 
 - **Test Results** — per-test steps, logs, timings and artifacts, with priority/status filters.
-- **AI Verdict** — root-cause verdict for each failure (`src/ai/agents/rcaAgent.ts`).
+- **AI Verdict** — root-cause verdict for each failure, from the RCA agent.
 - **Flaky** — pass/fail flips between this build and the previous one (`src/ai/agents/flakyAnalyzer.ts`); snapshots live in `reports/runs/`.
-- **AI Data / Self-Heal** — populated only when a test attaches `ai-data` / `self-heal` attachments.
+- **AI Data / Self-Heal** — the DataGen and self-heal agents' output, carried on the `ai-data` / `self-heal` attachments.
 
 ### Pinning a screenshot to a step
 
@@ -170,7 +220,7 @@ Two things to know:
 
 `shot()` in `src/utils/stepScreenshot.ts` is the manual version — it takes the index you pass it, for one-off captures outside a `visualStep`.
 
-Both AI passes are rule-based and offline: the verdicts come from a pattern table in `rcaAgent.ts`, and the flaky tab is a plain diff of two runs, so neither makes a network call. The reporter still gates the verdict pass behind an API key — `hasApiKey()` in `src/ai/config/providers.ts` looks for `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — so without one the AI Verdict tab stays empty.
+The AI tabs are fed by the agents described under [AI agents](#ai-agents). The verdict pass only runs when a provider is configured — `hasApiKey()` in `src/ai/config/providers.ts` asks the gateway, so any of the five keys counts — and it falls back to the rule table if the call fails. The Flaky tab is still a plain diff of two runs; no model is involved there.
 
 ## Data-driven testing utilities
 

@@ -1,9 +1,10 @@
 /**
  * LLM provider configuration for the reporter's AI features.
- * Keys come from the environment (.env), a run without one simply skips them.
+ * The provider list lives in the gateway, so both stay in step: this only
+ * answers "is any provider configured".
  */
-const API_KEY_VARS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'];
+import { availableProviders } from '../LLMGateway';
 
 export function hasApiKey(): boolean {
-    return API_KEY_VARS.some((name) => Boolean(process.env[name]));
+    return availableProviders().length > 0;
 }

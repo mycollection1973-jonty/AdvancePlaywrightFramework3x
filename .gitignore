@@ -10,6 +10,7 @@ tta-report/
 reports/
 allure-results/
 logs/
+.deflaky/
 
 # Playwright
 node_modules/
